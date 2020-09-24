@@ -9,14 +9,15 @@
 #include <stdio.h>
 #include <alsa/asoundlib.h>
 #include <inttypes.h>
+#include <math.h>
 
-static char *sound_device = "plughw:0,0"; /* playback device */
-static snd_pcm_format_t sample_format = SND_PCM_FORMAT_S16; /* sample format */
+static char *sound_device = "default"; /* playback device */
+static snd_pcm_format_t sample_format = SND_PCM_FORMAT_S16_LE; /* sample format */
 static unsigned int nb_channels = 2; /* number of channels, 2 for stereo */
 static unsigned int sample_rate = 44100; /* sample rate in Hz */
 static unsigned int buffer_time = 500000; /* ring buffer length in us */
 static unsigned int period_time = 100000; /* period time in us */
-static double sine_freq = 440; /* sinusoidal wave frequency in Hz */
+static double sine_freq = 1000; /* sinusoidal wave frequency in Hz */
 static unsigned int playback_duration = 5; /* duration of playback in seconds */
 
 static snd_pcm_sframes_t buffer_size; /* size of buffer size in samples (tbc) */
@@ -164,6 +165,30 @@ static int xrun_recovery(snd_pcm_t *handle, int err)
     return err;
 }
 
+static void generate_sine(snd_pcm_sframes_t _period_size, unsigned int _nb_channels, 
+                          int16_t *_samples, double *_phase) {
+    static double max_phase = 2. * M_PI;
+    double phase = *_phase;
+    double step = max_phase*sine_freq/(double)sample_rate;
+    unsigned int i = 0;
+    int16_t res;
+
+    unsigned int chn;
+    int format_bits = snd_pcm_format_width(sample_format);
+    unsigned int maxval = (1 << (format_bits - 1)) - 1;
+
+    while (i < _period_size) {
+        res = sin(phase) * maxval;
+        _samples[2*i] = res;
+        _samples[2*i+1] = res;
+        phase += step;
+        if (phase >= max_phase)
+            phase -= max_phase;
+        i++;
+    }
+    *_phase = phase;
+}
+
 static int playback(snd_pcm_t *handle,
                  int16_t *samples)
 {
@@ -176,7 +201,7 @@ static int playback(snd_pcm_t *handle,
         ptr = samples;
         cptr = period_size;
         while (cptr > 0) {
-            err = snd_pcm_mmap_writei(handle, ptr, cptr);
+            err = snd_pcm_writei(handle, ptr, cptr);
             if (err == -EAGAIN)
                 continue;
             if (err < 0) {
@@ -219,7 +244,7 @@ int main(void) {
 
     /* Set hardware parameters for the playback */
     /* We use interleaved mode, for left and right channels in the stereo stream */
-    if ((err = set_hwparams(handle, hwparams, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)) {
+    if ((err = set_hwparams(handle, hwparams, SND_PCM_ACCESS_RW_INTERLEAVED) < 0)) {
         printf("Setting of hardware parameters failed: %s\n", snd_strerror(err));
         return err;
     }
