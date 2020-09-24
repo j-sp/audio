@@ -1,3 +1,11 @@
+/******************************************************************************/
+/* SPDX-FileCopyrightText: 2020 Javier Serrano <javi@orellut.net>             */
+/* SPDX-License-Identifier: GPL-3.0-or-later                                  */
+/* This is a simplified and modified version of the example code at           */
+/* https://www.alsa-project.org/alsa-doc/alsa-lib/_2test_2pcm_8c-example.html */
+/* Work in progress                                                           */
+/******************************************************************************/
+
 #include <stdio.h>
 #include <alsa/asoundlib.h>
 #include <inttypes.h>
