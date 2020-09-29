@@ -218,13 +218,16 @@ static int playback(snd_pcm_t *handle,
     }
 }
 
-int main(void) {
+int main(int argc, char *argv[]) {
 
     int err;
     snd_pcm_t *handle;
     snd_pcm_hw_params_t *hwparams;
     snd_pcm_sw_params_t *swparams;
     int16_t *samples;
+
+    if(argc==2)
+        sine_freq = atoi(argv[1]);
 
     /* Allocate memory for hardware and software parameters */
     snd_pcm_hw_params_alloca(&hwparams);
