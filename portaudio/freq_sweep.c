@@ -13,7 +13,7 @@
 #define SAMPLE_RATE_IN_HZ   (44100)
 #define SINE_START_FREQ_IN_HZ (1000)
 #define SINE_STOP_FREQ_IN_HZ (1000)
-#define FRAMES_PER_BUFFER (512)
+#define FRAMES_PER_BUFFER (1024)
 
 typedef struct {
     float phase;
