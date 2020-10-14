@@ -19,6 +19,10 @@ typedef struct {
     float phase;
     float frequency;
     float freq_step;
+    PaTime *callback_invoked_time;
+    PaTime *first_sample_dac_time;
+    PaTime *callback_done_time;
+    PaStream *stream;
 } sine;
 
 
@@ -28,8 +32,15 @@ static int freq_sweep_callback (const void *inputBuffer, void *outputBuffer,
                            PaStreamCallbackFlags statusFlags,
                            void *userData) {
 
+
     /* Cast data passed through stream to our structure. */
     sine *wave = (sine*) userData;
+
+    *(wave->callback_invoked_time) = timeInfo->currentTime;
+    printf("Curent time: %15.10f\n", timeInfo->currentTime);
+    wave->callback_invoked_time++; 
+    *(wave->first_sample_dac_time++) = Pa_GetStreamTime(wave->stream); 
+
     float *out = (float*) outputBuffer;
     float sample;
     unsigned int i;
@@ -44,6 +55,7 @@ static int freq_sweep_callback (const void *inputBuffer, void *outputBuffer,
         wave->phase += phase_step;
     }
     wave->frequency += wave->freq_step;
+    *(wave->callback_done_time++) = Pa_GetStreamTime(wave->stream); 
     return 0;
 }
 
@@ -51,6 +63,8 @@ int main(int argc, char *argv[]) {
 
     PaStream *stream;
     PaError err;
+    int i;
+    PaTime *invoked_start, *first_start, *done_start;
      
     printf("PortAudio Test: output frequency swept sine wave.\n");
     /* Initialize our data for use by callback. */
@@ -73,6 +87,15 @@ int main(int argc, char *argv[]) {
     waveform.phase = 0.0;
     waveform.freq_step = (sine_stop_freq - sine_start_freq) / iterations;
     
+    waveform.callback_invoked_time = malloc(iterations*sizeof(PaTime));
+    waveform.first_sample_dac_time = malloc(iterations*sizeof(PaTime));
+    waveform.callback_done_time = malloc(iterations*sizeof(PaTime));
+    waveform.stream = stream;
+
+    invoked_start = waveform.callback_invoked_time;
+    first_start = waveform.first_sample_dac_time;
+    done_start = waveform.callback_done_time;
+
     /* Initialize library before making any other calls. */
     err = Pa_Initialize();
     if( err != paNoError ) goto error;
@@ -92,7 +115,7 @@ int main(int argc, char *argv[]) {
     if( err != paNoError ) goto error;
  
     /* Sleep for several seconds. */
-    Pa_Sleep(duration*1000);
+    Pa_Sleep(duration*1000/2);
  
     err = Pa_StopStream( stream );
     if( err != paNoError ) goto error;
@@ -102,6 +125,19 @@ int main(int argc, char *argv[]) {
     
     Pa_Terminate();
     printf("Test finished.\n");
+ 
+    waveform.callback_invoked_time = invoked_start;
+    waveform.first_sample_dac_time = first_start;
+    waveform.callback_done_time = done_start;
+
+    for(i=0; i<iterations; i++) {
+        printf("Iteration: %d:\t %15.10f %15.10f %15.10f\n", i, (float)*(invoked_start), *first_start++, *done_start++);
+        invoked_start++;
+    }
+
+    free(waveform.callback_invoked_time);
+    free(waveform.first_sample_dac_time);
+    free(waveform.callback_done_time);
     return err;
 
 error:
