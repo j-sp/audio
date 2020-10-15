@@ -51,7 +51,7 @@ static int freq_sweep_callback (const void *inputBuffer, void *outputBuffer,
     double phase_step = 2*M_PI*(wave->frequency)/(double)SAMPLE_RATE_IN_HZ;
 
 
-    fprintf(stderr,"fpb %d f %.1f\n", framesPerBuffer, wave->frequency);
+    /* fprintf(stderr,"fpb %d f %.1f\n", framesPerBuffer, wave->frequency); */
     for(i=0; i<framesPerBuffer; i++)
     {
         sample = sin(wave->phase);
