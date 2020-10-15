@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <portaudio.h>
+#include <strings.h>
 
 #define DURATION_IN_SECONDS   (10)
 #define SAMPLE_RATE_IN_HZ   (44100)
@@ -23,6 +24,7 @@ typedef struct {
     PaTime *first_sample_dac_time;
     PaTime *callback_done_time;
     PaStream *stream;
+    int counter;
 } sine;
 
 
@@ -37,9 +39,10 @@ static int freq_sweep_callback (const void *inputBuffer, void *outputBuffer,
     sine *wave = (sine*) userData;
 
     *(wave->callback_invoked_time) = timeInfo->currentTime;
-    printf("Curent time: %15.10f\n", timeInfo->currentTime);
+    /* printf("Curent time: %15.10f\n", timeInfo->currentTime); */
     wave->callback_invoked_time++; 
-    *(wave->first_sample_dac_time++) = Pa_GetStreamTime(wave->stream); 
+    *(wave->first_sample_dac_time) = timeInfo->outputBufferDacTime;
+    wave->first_sample_dac_time++;
 
     float *out = (float*) outputBuffer;
     float sample;
@@ -55,7 +58,9 @@ static int freq_sweep_callback (const void *inputBuffer, void *outputBuffer,
         wave->phase += phase_step;
     }
     wave->frequency += wave->freq_step;
-    *(wave->callback_done_time++) = Pa_GetStreamTime(wave->stream); 
+    *(wave->callback_done_time) = Pa_GetStreamTime(wave->stream); 
+    wave->callback_done_time++;
+    wave->counter++;
     return 0;
 }
 
@@ -65,6 +70,12 @@ int main(int argc, char *argv[]) {
     PaError err;
     int i;
     PaTime *invoked_start, *first_start, *done_start;
+    int numDevices;
+    PaDeviceInfo *deviceInfo;
+    PaDeviceIndex output_dev;
+    float slack;
+
+    PaStreamParameters outputParameters;
      
     printf("PortAudio Test: output frequency swept sine wave.\n");
     /* Initialize our data for use by callback. */
@@ -86,11 +97,14 @@ int main(int argc, char *argv[]) {
     waveform.frequency = (float) SINE_START_FREQ_IN_HZ;
     waveform.phase = 0.0;
     waveform.freq_step = (sine_stop_freq - sine_start_freq) / iterations;
+    waveform.counter = 0;
     
-    waveform.callback_invoked_time = malloc(iterations*sizeof(PaTime));
-    waveform.first_sample_dac_time = malloc(iterations*sizeof(PaTime));
-    waveform.callback_done_time = malloc(iterations*sizeof(PaTime));
-    waveform.stream = stream;
+    /* Being conservative in the size to account for the non-exact duration of sound */
+    /* when using Pa_Sleep() (taking actually twice the memory we need in principle) */
+    waveform.callback_invoked_time = malloc(2*iterations*sizeof(PaTime));
+    waveform.first_sample_dac_time = malloc(2*iterations*sizeof(PaTime));
+    waveform.callback_done_time = malloc(2*iterations*sizeof(PaTime));
+    
 
     invoked_start = waveform.callback_invoked_time;
     first_start = waveform.first_sample_dac_time;
@@ -99,23 +113,58 @@ int main(int argc, char *argv[]) {
     /* Initialize library before making any other calls. */
     err = Pa_Initialize();
     if( err != paNoError ) goto error;
+
     
-    /* Open an audio I/O stream. */
-    err = Pa_OpenDefaultStream (&stream,
-                                0,          /* no input channels */
-                                2,          /* stereo output */
-                                paFloat32,  /* 32 bit floating point output */
+    numDevices = Pa_GetDeviceCount();
+    if( numDevices < 0 ) {
+        printf( "ERROR: Pa_CountDevices returned 0x%x\n", numDevices );
+        err = numDevices;
+        goto error;
+    }
+    
+    for(i=0; i<numDevices; i++) {
+        printf("Device number %d: %s ", i, Pa_GetDeviceInfo(i)->name);
+        printf("(Host API: %s)\n", Pa_GetHostApiInfo(Pa_GetDeviceInfo(i)->hostApi)->name);
+    }
+    printf("Please choose your device number (default: %d)\n", Pa_GetDefaultOutputDevice());
+    scanf("%d", &output_dev);
+    bzero( &outputParameters, sizeof( outputParameters ) ); 
+    outputParameters.channelCount = 2;
+    outputParameters.device = output_dev;
+    outputParameters.hostApiSpecificStreamInfo = NULL;
+    outputParameters.sampleFormat = paFloat32;
+    outputParameters.suggestedLatency = Pa_GetDeviceInfo(output_dev)->defaultLowOutputLatency ;
+    outputParameters.hostApiSpecificStreamInfo = NULL; 
+
+err = Pa_OpenStream(
+                &stream,
+                NULL,
+                &outputParameters,
+                SAMPLE_RATE_IN_HZ,
+                FRAMES_PER_BUFFER,
+                paNoFlag, //flags that can be used to define dither, clip settings and more
+                freq_sweep_callback, //your callback function
+                &waveform); //data to be passed to callback. In C++, it is frequently (void *)this
+//don't forget to check errors!
+
+    /* Open an audio I/O stream. 
+     err = Pa_OpenDefaultStream (&stream,
+                                0,           no input channels 
+                                2,           stereo output 
+                                paFloat32,   32 bit floating point output 
                                 SAMPLE_RATE_IN_HZ,
                                 FRAMES_PER_BUFFER,
                                 freq_sweep_callback,
-                                &waveform);
+                                &waveform); */
     if( err != paNoError ) goto error;
+
+    waveform.stream = stream;
  
     err = Pa_StartStream( stream );
     if( err != paNoError ) goto error;
  
     /* Sleep for several seconds. */
-    Pa_Sleep(duration*1000/2);
+    Pa_Sleep(duration*1000);
  
     err = Pa_StopStream( stream );
     if( err != paNoError ) goto error;
@@ -130,8 +179,9 @@ int main(int argc, char *argv[]) {
     waveform.first_sample_dac_time = first_start;
     waveform.callback_done_time = done_start;
 
-    for(i=0; i<iterations; i++) {
-        printf("Iteration: %d:\t %15.10f %15.10f %15.10f\n", i, (float)*(invoked_start), *first_start++, *done_start++);
+    for(i=0; i<waveform.counter; i++) {
+        slack = *first_start - *done_start;
+        printf("Iteration %d:\t Invoke: %11.4f\t DAC: %11.4f\t Done: %11.4f\t Slack: %7.4f\n", i, (float)*(invoked_start), *first_start++, *done_start++, slack);
         invoked_start++;
     }
 
