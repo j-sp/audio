@@ -17,9 +17,9 @@
 #define FRAMES_PER_BUFFER (1024)
 
 typedef struct {
-    float phase;
-    float frequency;
-    float freq_step;
+    double phase;
+    double frequency;
+    double freq_step;
     PaTime *callback_invoked_time;
     PaTime *first_sample_dac_time;
     PaTime *callback_done_time;
@@ -45,17 +45,21 @@ static int freq_sweep_callback (const void *inputBuffer, void *outputBuffer,
     wave->first_sample_dac_time++;
 
     float *out = (float*) outputBuffer;
-    float sample;
+    double sample;
     unsigned int i;
     (void) inputBuffer; /* Prevent unused variable warning. */
-    float phase_step = 2*M_PI*(wave->frequency)/(float)SAMPLE_RATE_IN_HZ;
+    double phase_step = 2*M_PI*(wave->frequency)/(double)SAMPLE_RATE_IN_HZ;
 
+
+    fprintf(stderr,"fpb %d f %.1f\n", framesPerBuffer, wave->frequency);
     for(i=0; i<framesPerBuffer; i++)
     {
         sample = sin(wave->phase);
         *out++ = sample;  /* left */
         *out++ = sample;  /* right */
         wave->phase += phase_step;
+        if( wave->phase > 2*M_PI )
+            wave->phase -= 2 * M_PI;
     }
     wave->frequency += wave->freq_step;
     *(wave->callback_done_time) = Pa_GetStreamTime(wave->stream); 
@@ -94,7 +98,7 @@ int main(int argc, char *argv[]) {
     unsigned int iterations = (unsigned int)
                               ((float) duration / ((float) FRAMES_PER_BUFFER / (float) SAMPLE_RATE_IN_HZ));
 
-    waveform.frequency = (float) SINE_START_FREQ_IN_HZ;
+    waveform.frequency = (float) sine_start_freq;
     waveform.phase = 0.0;
     waveform.freq_step = (sine_stop_freq - sine_start_freq) / iterations;
     waveform.counter = 0;
