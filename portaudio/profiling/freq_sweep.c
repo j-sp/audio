@@ -39,7 +39,6 @@ static int freq_sweep_callback (const void *inputBuffer, void *outputBuffer,
     sine *wave = (sine*) userData;
 
     *(wave->callback_invoked_time) = timeInfo->currentTime;
-    /* printf("Curent time: %15.10f\n", timeInfo->currentTime); */
     wave->callback_invoked_time++; 
     *(wave->first_sample_dac_time) = timeInfo->outputBufferDacTime;
     wave->first_sample_dac_time++;
