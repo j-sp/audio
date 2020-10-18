@@ -29,8 +29,6 @@ typedef struct {
     int counter;
     int disc_count;
     int log;
-    double *wave_wrapped_phase; /* erase */
-    double *wave_unwrapped_phase; /* erase */
     double *differences;
 } sine;
 
@@ -55,8 +53,6 @@ static int freq_sweep_callback (const void *inputBuffer, void *outputBuffer,
     unsigned int i;
     (void) inputBuffer; /* Prevent unused variable warning. */
     double phase_step = 2*M_PI*(wave->frequency)/(double)SAMPLE_RATE_IN_HZ;
-    double *wave_wrapped_phase = wave->wave_wrapped_phase; /* erase */
-    double *wave_unwrapped_phase = wave->wave_unwrapped_phase; /* erase */
     double discrepancy;
 
     /* fprintf(stderr,"fpb %d f %.1f\n", framesPerBuffer, wave->frequency); */
@@ -73,17 +69,11 @@ static int freq_sweep_callback (const void *inputBuffer, void *outputBuffer,
         discrepancy = wave->phase_d - wave->phase_unwrapped;
         if( wave->phase_wrapped > 2*M_PI )
             wave->phase_wrapped -= 2 * M_PI;
-        if (wave->log == 1) { /* erase */
-            *(wave->wave_wrapped_phase++) = sample_wrapped; /* erase */
-            *(wave->wave_unwrapped_phase++) = sample_unwrapped; /* erase */
-        } /* erase */
     }
     wave->frequency += wave->freq_step;
     *(wave->callback_done_time) = Pa_GetStreamTime(wave->stream); 
     wave->callback_done_time++;
     wave->counter++;
-    wave->wave_wrapped_phase = wave_wrapped_phase; /* erase */
-    wave->wave_unwrapped_phase = wave_unwrapped_phase; /* erase */
     if ((wave->log==1) && ((discrepancy > 1.0) || (discrepancy < -1.0))) {
         wave->log = 0;
         wave->disc_count = wave->counter - 1;
@@ -115,7 +105,6 @@ int main(int argc, char *argv[]) {
     unsigned int iterations;
     FILE *fp;
     char double_string[20];
-    double *temp_double_p1, *temp_double_p2; /* erase */
     double *differences;
 
     if (argc==4) {
@@ -140,10 +129,6 @@ int main(int argc, char *argv[]) {
     waveform.callback_invoked_time = malloc(2*iterations*sizeof(PaTime));
     waveform.first_sample_dac_time = malloc(2*iterations*sizeof(PaTime));
     waveform.callback_done_time = malloc(2*iterations*sizeof(PaTime));
-    
-    /* Logging one buffer worth of double-phase and float-phase waveforms to compare */ /* erase */
-    waveform.wave_wrapped_phase = malloc(FRAMES_PER_BUFFER * sizeof(double)); /* erase */
-    waveform.wave_unwrapped_phase = malloc(FRAMES_PER_BUFFER * sizeof(double)); /* erase */
 
     waveform.differences = malloc(2*iterations*FRAMES_PER_BUFFER*sizeof(double));
     differences = waveform.differences;
@@ -230,14 +215,10 @@ err = Pa_OpenStream(
 
     fp = fopen("diag.txt", "w");
 
-    temp_double_p1 = waveform.wave_wrapped_phase; /* erase */
-    temp_double_p2 = waveform.wave_unwrapped_phase; /* erase */
     waveform.differences = differences;
     for(i=0; i<FRAMES_PER_BUFFER*iterations; i++) {
         fprintf(fp, "%10.5f\n", *(waveform.differences++));
     }
-    waveform.wave_wrapped_phase = temp_double_p1; /* erase */
-    waveform.wave_unwrapped_phase = temp_double_p2; /* erase */
 
     fclose(fp);
 
@@ -247,8 +228,6 @@ err = Pa_OpenStream(
     free(waveform.callback_invoked_time);
     free(waveform.first_sample_dac_time);
     free(waveform.callback_done_time);
-    free(waveform.wave_wrapped_phase); /* erase */
-    free(waveform.wave_unwrapped_phase); /* erase */
     free(differences);
 
     return err;
