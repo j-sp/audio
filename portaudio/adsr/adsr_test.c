@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <portaudio.h>
 #include <math.h>
-#include "audio.h"
 #include "adsr.h"
 
 #define SAMPLE_RATE_IN_HZ   (44100)
